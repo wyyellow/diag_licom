@@ -1,5 +1,5 @@
 #!/bin/bash
-exp_id=piControl
+exp_id=historical
 licom_diag_location=/home/hwy/diag_licom
 ncl_scripts=/home/hwy/ncl_scripts
 mkdir -p $licom_diag_location/outputs/$exp_id
@@ -10,12 +10,12 @@ rm -rf $licom_diag_location/outputs/$exp_id/Figures/*
 Figures_location=$licom_diag_location/outputs/$exp_id/Figures
 
 outputs_location="$licom_diag_location/outputs/$exp_id/nc_data"
-licom_mon_data_dir=/public/nfs/5/ljli/cmip5/control/t0225_ocn_S/ocn
-start_year=540
+licom_mon_data_dir=/public/nfs/1/cmip5/20c/hist_r440_vol28/ocn
+start_year=485
 end_year=590
 other_year="equal"
-model_year=200
-image_year=200
+model_year=485
+image_year=1900
 time_diff=$(($image_year-$model_year))
 fig_start_year=$(($start_year+$image_year-$model_year))
 fig_end_year=$(($end_year+$image_year-$model_year))
@@ -357,15 +357,45 @@ begin
     plot = gsn_csm_xy(wks,lat,nht,res)
 
 end
-
 EOF
-./amoc_diag ${exp_id}.namelist>amoc_log&
-#exit
-./acc_diag ${exp_id}.namelist>acc_log& 
-exit
-./nht_diag ${exp_id}.namelist& 
+
+cat << EOF > $outputs_location/sst_cycle.ncl
+load "$NCARG_ROOT/lib/ncarg/nclscripts/csm/gsn_code.ncl"
+load "$NCARG_ROOT/lib/ncarg/nclscripts/csm/gsn_csm.ncl"
+load "$NCARG_ROOT/lib/ncarg/nclscripts/csm/contributed.ncl"
+load "$NCARG_ROOT/lib/ncarg/nclscripts/csm/shea_util.ncl"
+begin
+    fi = addfile("$sst_cycle_file","r")
+    sst_cycle   =   fi->sst_cycle
+    wks         =   gsn_open_wks("pdf","sst_cycle_$(($nht_start_year_average+$time_diff))-$(($nht_end_year_average+$time_diff))")
+    gsn_define_colormap(wks,"BlWhRe")
+    res =   True
+    res@cnFillOn    = True
+    res@cnLevelSelectionMode = "ManualLevels"
+    res@cnMinLevelValF  =   -3.0
+    res@cnMaxLevelValF  =    3.0
+    res@cnLevelSpacingF =    0.5
+    res@gsnSpreadColors =   True
+    res@gsnSpreadColorEnd    = -3
+    res@tiMainString         = "Global Region"
+    res@tmYLMode             = "Explicit"
+    res@tmYLValues    = (/  1.,2.,3.,4.,5.,6.,7.,8.,9.,10.,11.,12. /)
+    res@tmYLLabels    = (/"J","F","M","A","M","J","J","A","S","O","N","D"/)
+    plot = gsn_csm_hov(wks, sst_cycle, res)
+end
+EOF
+
+./gen_data_in_list ${exp_id}.namelist
+./amoc_diag ${exp_id}.namelist > amoc_log&
+./acc_diag  ${exp_id}.namelist > acc_log&
+./nht_diag  ${exp_id}.namelist > nht_log&
+./sst_diag  ${exp_id}.namelist > sst_log&
+
+wait
 cd $Figures_location
-ncl  ${outputs_location}/amoc_time_series.ncl 
-ncl  ${outputs_location}/amoc_2d_average.ncl
-ncl  ${outputs_location}/acc_time_series.ncl
-ncl  $outputs_location/nht_average.ncl 
+ncl ${outputs_location}/amoc_time_series.ncl
+ncl ${outputs_location}/amoc_2d_average.ncl
+ncl ${outputs_location}/acc_time_series.ncl
+ncl $outputs_location/sst_cycle.ncl
+ncl $outputs_location/nht_average.ncl
+exit
