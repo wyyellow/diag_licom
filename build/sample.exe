@@ -1,0 +1,371 @@
+#!/bin/bash
+exp_id=piControl
+licom_diag_location=/home/hwy/diag_licom
+ncl_scripts=/home/hwy/ncl_scripts
+mkdir -p $licom_diag_location/outputs/$exp_id
+mkdir -p $licom_diag_location/outputs/$exp_id/nc_data
+mkdir -p $licom_diag_location/outputs/$exp_id/Figures
+rm -rf $licom_diag_location/outputs/$exp_id/nc_data/*
+rm -rf $licom_diag_location/outputs/$exp_id/Figures/*
+Figures_location=$licom_diag_location/outputs/$exp_id/Figures
+
+outputs_location="$licom_diag_location/outputs/$exp_id/nc_data"
+licom_mon_data_dir=/public/nfs/5/ljli/cmip5/control/t0225_ocn_S/ocn
+start_year=540
+end_year=590
+other_year="equal"
+model_year=200
+image_year=200
+time_diff=$(($image_year-$model_year))
+fig_start_year=$(($start_year+$image_year-$model_year))
+fig_end_year=$(($end_year+$image_year-$model_year))
+
+if_amoc_ts=.true.
+amoc_ts_file=${outputs_location}/amoc_time_series.nc
+amoc_start_year_ts=200
+amoc_end_year_ts=900
+
+if_amoc_2d=.true.
+amoc_2d_file=${outputs_location}/amoc_2d_average.nc
+amoc_start_year_2d=200
+amoc_end_year_2d=900
+
+if_nht_ts=.true.
+nht_ts_file=${outputs_location}/nht_ts_file.nc
+nht_start_year_ts=200
+nht_end_year_ts=900
+
+if_nht_average=.true.
+nht_average_file=${outputs_location}/nht_average_file.nc
+nht_start_year_average=200
+nht_end_year_average=900
+
+if_acc_ts=.true.
+acc_ts_file="${outputs_location}/acc_time_series.nc"
+acc_start_year_ts=200
+acc_end_year_ts=900
+
+if_sst_cycle=.true.
+sst_cycle_file=${outputs_location}/sst_cycle_file.nc
+sst_cycle_start=200
+sst_cycle_end=900
+
+num_lon=360
+num_lat=196
+num_lev=30
+
+if [ $other_year == "equal" ];then
+    amoc_start_year_ts=$start_year
+    amoc_end_year_ts=$end_year
+    amoc_start_year_2d=$start_year
+    amoc_end_year_2d=$end_year
+    nht_start_year_ts=$start_year
+    nht_end_year_ts=$end_year
+    nht_start_year_average=$start_year
+    nht_end_year_average=$end_year
+    acc_start_year_ts=$start_year
+    acc_end_year_ts=$end_year
+    sst_cycle_start=$start_year
+    sst_cycle_end=$end_year
+fi
+
+
+cat << EOF > ${exp_id}.namelist
+&grid_information
+num_lon                     =       $num_lon
+num_lat                     =       $num_lat
+num_lev                     =       $num_lev
+file_for_grid_info          =       "../data_in/MMEAN0001-01.nc"
+basin_file_name             =       "../data_in/BASIN_eq1x1.nc"
+density_file_name           =       "../data_in/dncoef.h1"
+/
+
+&model_data_in
+licom_mon_data_dir          =       "$licom_mon_data_dir" 
+licom_mon_data_list         =       "./licom_mon_data_list"
+start_year                  =       $start_year
+end_year                    =       $end_year
+/
+
+&output_settings
+model_year                  =       $model_year
+image_year                  =       $image_year
+/
+
+&amoc_settings
+if_amoc_ts                  =       $if_amoc_ts
+amoc_ts_file                =       "$amoc_ts_file"
+amoc_start_year_ts          =       $amoc_start_year_ts
+amoc_end_year_ts            =       $amoc_end_year_ts
+if_amoc_2d                  =       $if_amoc_2d
+amoc_2d_file                =       "$amoc_2d_file"
+amoc_start_year_2d          =       $amoc_start_year_2d
+amoc_end_year_2d            =       $amoc_end_year_2d
+/
+
+&nht_settings
+if_nht_ts                   =       $if_nht_ts
+nht_ts_file                 =       "$nht_ts_file"
+nht_start_year_ts           =       $nht_start_year_ts
+nht_end_year_ts             =       $nht_end_year_ts
+if_nht_average              =       $if_nht_average
+nht_average_file            =       "${outputs_location}/nht_average_file.nc"
+nht_start_year_average      =       $nht_start_year_average
+nht_end_year_average        =       $nht_end_year_average
+/
+
+&acc_settings
+if_acc_ts                   =       $if_acc_ts
+acc_ts_file                 =       "$acc_ts_file"
+acc_start_year_ts           =       $acc_start_year_ts
+acc_end_year_ts             =       $acc_end_year_ts
+/
+
+&sst_settings
+if_sst_cycle                =       $if_sst_cycle
+sst_cycle_file              =       "$sst_cycle_file"
+sst_cycle_start             =       $sst_cycle_start
+sst_cycle_end               =       $sst_cycle_end
+/
+EOF
+
+cat << EOF > ${outputs_location}/acc_time_series.ncl
+load "$NCARG_ROOT/lib/ncarg/nclscripts/csm/gsn_code.ncl"
+load "$NCARG_ROOT/lib/ncarg/nclscripts/csm/gsn_csm.ncl"
+load "$NCARG_ROOT/lib/ncarg/nclscripts/csm/contributed.ncl"
+load "$NCARG_ROOT/lib/ncarg/nclscripts/csm/shea_util.ncl"
+begin
+    acc_time_series =   "$acc_ts_file"
+    wks     =   gsn_open_wks("pdf","acc_time_series_$(($acc_start_year_ts+$time_diff))-$(($acc_end_year_ts+$time_diff))")
+    file1   =   addfile(acc_time_series,"r")
+    time    =   file1->time
+    acc     =   file1->acc
+    res     =   True
+    res@vpHeightF       =   0.4
+    res@vpWidthF        =   0.65
+    res@trXMinF         =   $(($acc_start_year_ts+$time_diff))
+    res@trXMaxF         =   $(($acc_end_year_ts+$time_diff))
+    res@tiMainString    = "ACC changes"
+    res@tiMainPosition = "Center"
+    res@tiMainFontHeightF = 0.02
+    res@tiYAxisString = "Sv"
+    res@tiXAxisString = "Year"
+    res@xyMonoDashPattern = False
+    res@xyDashPatterns     = (/0/)
+    res@xyLineThicknesses = (/2.0/)
+    res@xyLineColors      = (/"black"/)
+    res@gsnRightString    = "$exp_id"
+    plot = gsn_csm_xy(wks,time,acc,res)
+    end
+EOF
+cat << EOF > ${outputs_location}/amoc_time_series.ncl
+load "$NCARG_ROOT/lib/ncarg/nclscripts/csm/gsn_code.ncl"
+load "$NCARG_ROOT/lib/ncarg/nclscripts/csm/gsn_csm.ncl"
+load "$NCARG_ROOT/lib/ncarg/nclscripts/csm/contributed.ncl"
+load "$NCARG_ROOT/lib/ncarg/nclscripts/csm/shea_util.ncl"
+begin
+    amoc_time_series    =   "$amoc_ts_file"
+    wks=gsn_open_wks("pdf","amoc_time_series_$(($amoc_start_year_ts+$time_diff))-$(($amoc_end_year_ts+$time_diff))")
+    file1 = addfile(amoc_time_series,"r")
+    time  = file1->time
+    amoc  = file1->amoc
+    res   = True
+    res@vpHeightF       =   0.4
+    res@vpWidthF        =   0.65
+    res@trXMinF         =   $(($amoc_start_year_ts+$time_diff))
+    res@trXMaxF         =   $(($amoc_end_year_ts+$time_diff))
+    res@tiMainString = "AMOC changes"
+    res@tiMainPosition = "Center"
+    res@tiMainFontHeightF = 0.02
+    res@tiYAxisString = "Sv"
+    res@tiXAxisString = "Year"
+    res@xyMonoDashPattern = False
+    res@xyDashPatterns     = (/0/)
+    res@xyLineThicknesses = (/2.0/)
+    res@xyLineColors      = (/"black"/)
+
+    res@gsnRightString    =   "$exp_id"
+    plot = gsn_csm_xy(wks,time,amoc,res)
+end
+EOF
+cat << EOF > ${Figures_location}/amoc_rgb.txt
+255	255	255
+0	0	0
+112	112	112
+208	208	208
+228	0	228
+142	0	222
+0	8	255
+0	124	255
+0	189	255
+29	229	255
+0	255	252
+0	255	216
+0	255	91
+79	255	0
+255	252	3
+255	216 40
+255	177 50
+252 151	34
+247	135	0
+253	27	0
+227	0	0
+198	0	0
+EOF
+cat << EOF > ${outputs_location}/amoc_2d_average.ncl
+load "$NCARG_ROOT/lib/ncarg/nclscripts/csm/gsn_code.ncl"
+load "$NCARG_ROOT/lib/ncarg/nclscripts/csm/gsn_csm.ncl"
+load "$NCARG_ROOT/lib/ncarg/nclscripts/csm/contributed.ncl"
+load "$NCARG_ROOT/lib/ncarg/nclscripts/csm/shea_util.ncl"
+
+begin
+    file_amoc       =   addfile("$amoc_2d_file","r")
+    
+    type    =       "pdf"
+    wks     =       gsn_open_wks(type,"amoc_2d_average_$(($amoc_start_year_2d+$time_diff))-$(($amoc_end_year_2d+$time_diff))")
+    cmap = RGBtoCmap("amoc_rgb.txt")
+    gsn_define_colormap(wks,cmap)
+
+    res     =       True
+    res@gsnMaximize     =    True
+    res@cnFillOn        =    True
+    res@gsnFrame        =    False
+    res@gsnDraw         =    False
+    res@cnLineLabelsOn   =   True
+    res@cnLabelMasking             = True
+    res@cnLineLabelBackgroundColor = "transparent"
+    res@cnLineLabelPlacementMode = "constant"
+    res@gsnSpreadColors         = True
+    res@lbLabelStride           = 2
+    res@cnLineLabelInterval     = 1
+
+    res@gsnLeftString           = ""
+    res@gsnRightString          = ""
+    res@gsnCenterString         = ""
+    res@tiMainString            = "AMOC"
+    res@tiMainPosition          = "Center"
+   ; res@tiMainFontHeightF       = 0.025
+    res@trYReverse              =  False
+    res@tiYAxisString = ""
+    res@gsnYAxisIrregular2Linear = True
+    res@gsnXAxisIrregular2Linear = True
+    res@cnMissingValPerimOn     = True
+    res@cnMissingValFillPattern = 3
+    res@cnMissingValFillColor   = "black"
+    res@cnInfoLabelOn = False
+
+    res@vpHeightF       =   0.4
+    res@vpWidthF        =   0.6
+
+    res@cnLevelSelectionMode    =   "ExplicitLevels"
+    res@cnLevels  = (/-44.0,-36.0,-28.0,-24.0,-20.0,-16.0,-12.0,-8.0,-4.0,0.0,\\
+                        4.0,  8.0, 12.0, 16.0, 20.0, 24.0, 28.0, 36.0, 44.0/)
+    ;res@cnLabelBarEndStyle    = "IncludeMinMaxLabels"  ; turn on end labels
+    res@gsnStringFontHeightF = 0.020
+    res@gsnLeftString = "units: Sv"
+
+    global_moc  =   file_amoc->amoc
+    ;global_moc = where(.not.ismissing(global_moc),global_moc/1.0e6,global_moc)
+    res@gsnRightString  =   "min: "+sprintf("%4.2f", min(global_moc))+\\
+                             " " + \\
+                            "max: "+sprintf("%4.2f", max(global_moc))
+
+    ;res@trYMinF         =    -2000.0
+    ;res@trYMaxF         =        0.0
+    res@lbLabelBarOn    =   False
+    plot1 = gsn_csm_contour(wks,global_moc(1:22,:),res)
+   ;gsn_draw_colormap(wks)
+    
+    res@tiMainString            = "Global MOC"
+    res@lbLabelBarOn    =   False
+    res@gsnLeftString   =   ""
+    res@gsnRightString  =   ""
+    plot2 = gsn_csm_contour(wks,global_moc(22:30,:),res)
+    
+    attachres1 = True
+    attachres1@gsnAttachPlotsXAxis = True
+    attachres1@gsnAttachBorderOn = False
+    attachres2 = True
+
+    attach_plot = gsn_attach_plots(plot1,plot2,attachres1,attachres2)
+    txres               = True
+    txres@txAngleF      = 90.
+    txres@txFontHeightF = 0.020
+    txid = gsn_create_text(wks, "Depth (m)", txres)
+    amres                  = True
+    amres@amParallelPosF   = -0.70
+    amres@amOrthogonalPosF = 0.5
+    amres@amJust           = "CenterCenter"
+    annoid = gsn_add_annotation(plot1, txid, amres)
+
+    global_moc  =   file_amoc->global_moc
+    ;global_moc = where(.not.ismissing(global_moc),global_moc/1.0e6,global_moc)
+    res@gsnRightString  =   "min: "+sprintf("%4.2f", min(global_moc))+\\
+                             " " + \\
+                            "max: "+sprintf("%4.2f", max(global_moc))
+    ;res@trYMinF         =    -2000.0
+    ;res@trYMaxF         =        0.0
+    res@lbLabelBarOn    =   False
+    plot3 = gsn_csm_contour(wks,global_moc(1:22,:),res)
+   ;gsn_draw_colormap(wks)
+    
+    res@lbLabelBarOn    =   False
+    res@gsnLeftString   =   ""
+    res@gsnRightString  =   ""
+    res@tiMainString    =   "" 
+    plot4 = gsn_csm_contour(wks,global_moc(22:30,:),res)
+    
+    attachres1 = True
+    attachres1@gsnAttachPlotsXAxis = True
+    attachres1@gsnAttachBorderOn = False
+    attachres2 = True
+
+    attach_plot1 = gsn_attach_plots(plot3,plot4,attachres1,attachres2)
+    resP                     = True
+    resP@gsnPanelLabelBar    = True   
+    gsn_panel(wks,(/plot1,plot3/),(/1,2/),resP)
+
+end
+
+EOF
+
+cat << EOF > $outputs_location/nht_average.ncl
+load "$NCARG_ROOT/lib/ncarg/nclscripts/csm/gsn_code.ncl"
+load "$NCARG_ROOT/lib/ncarg/nclscripts/csm/gsn_csm.ncl"
+load "$NCARG_ROOT/lib/ncarg/nclscripts/csm/contributed.ncl"
+load "$NCARG_ROOT/lib/ncarg/nclscripts/csm/shea_util.ncl"
+begin
+    file_nht    =   addfile("$nht_average_file","r")
+    wks         =   gsn_open_wks("pdf","nht_average_$(($nht_start_year_average+$time_diff))-$(($nht_end_year_average+$time_diff))")
+    lat         =   file_nht->lat
+    nht         =   file_nht->nht
+
+
+    res         =   True
+    res@vpHeightF   =   0.4
+    res@vpWidthF    =   0.65
+    res@tiMainString = "Atlantic Northward heat transport"
+    res@tiMainPosition = "Center"
+    res@tiMainFontHeightF = 0.02
+    res@tiYAxisString = "Pw"
+    res@tiXAxisString = "latitude"
+    res@xyMonoDashPattern = False
+    res@xyDashPatterns     = (/0/)
+    res@xyLineThicknesses = (/2.0/)
+    res@xyLineColors      = (/"black"/)
+    res@gsnRightString    =   "$exp_id"
+    plot = gsn_csm_xy(wks,lat,nht,res)
+
+end
+
+EOF
+./amoc_diag ${exp_id}.namelist>amoc_log&
+#exit
+./acc_diag ${exp_id}.namelist>acc_log& 
+exit
+./nht_diag ${exp_id}.namelist& 
+cd $Figures_location
+ncl  ${outputs_location}/amoc_time_series.ncl 
+ncl  ${outputs_location}/amoc_2d_average.ncl
+ncl  ${outputs_location}/acc_time_series.ncl
+ncl  $outputs_location/nht_average.ncl 
